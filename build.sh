@@ -30,17 +30,32 @@ need_cmd() {
     command -v "$1" >/dev/null 2>&1 || return 1
 }
 
+have_lzma_headers() {
+    printf '#include <lzma.h>\n' | gcc -E - >/dev/null 2>&1
+}
+
 install_dependencies() {
     local missing=()
     local cmd
+    local need_lzma=false
 
     for cmd in curl tar git make gcc perl getconf; do
         need_cmd "${cmd}" || missing+=("${cmd}")
     done
 
-    [[ ${#missing[@]} -eq 0 ]] && return 0
+    if need_cmd gcc && ! have_lzma_headers; then
+        need_lzma=true
+    fi
 
-    warn "Missing required commands: ${missing[*]}"
+    [[ ${#missing[@]} -eq 0 && "${need_lzma}" == false ]] && return 0
+
+    if [[ ${#missing[@]} -gt 0 ]]; then
+        warn "Missing required commands: ${missing[*]}"
+    fi
+
+    if [[ "${need_lzma}" == true ]]; then
+        warn "Missing required iPXE LZMA development headers (lzma.h)."
+    fi
 
     if command -v apt-get >/dev/null 2>&1; then
         log "Installing required build dependencies with apt..."
@@ -48,19 +63,21 @@ install_dependencies() {
         local sudo_cmd=()
         if [[ ${EUID} -ne 0 ]]; then
             command -v sudo >/dev/null 2>&1 || \
-                die "Dependencies are missing and sudo is not available. Install: build-essential git curl perl"
+                die "Dependencies are missing and sudo is not available. Install: build-essential git curl perl liblzma-dev"
             sudo_cmd=(sudo)
         fi
 
         "${sudo_cmd[@]}" apt-get update
-        "${sudo_cmd[@]}" apt-get install -y build-essential git curl perl
+        "${sudo_cmd[@]}" apt-get install -y build-essential git curl perl liblzma-dev
     else
-        die "Missing required commands: ${missing[*]}. Install your distribution's build-essential/compiler, git, curl and perl packages, then rerun build.sh."
+        die "Missing iPXE build dependencies. Install your distribution's build-essential/compiler, git, curl, perl and liblzma/xz development headers, then rerun build.sh."
     fi
 
     for cmd in curl tar git make gcc perl getconf; do
         need_cmd "${cmd}" || die "Required command still unavailable after dependency installation: ${cmd}"
     done
+
+    have_lzma_headers || die "lzma.h is still unavailable after dependency installation."
 }
 
 refresh_repo() {
