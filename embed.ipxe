@@ -1,0 +1,19 @@
+#!ipxe
+
+# Tiny embedded bootstrap for legacy BIOS iPXE.
+#
+# The DHCP server may hand this client non-efi/ipxe.pxe again, so do not fall
+# through to normal iPXE autoboot.  Instead obtain networking and explicitly
+# chain to the editable autoexec.ipxe on the TFTP server.
+
+dhcp || goto failed
+
+isset ${next-server} || set next-server 10.1.2.3
+
+chain tftp://${next-server}/autoexec.ipxe || goto failed
+
+:failed
+echo
+echo Unable to load tftp://${next-server}/autoexec.ipxe
+echo Dropping to iPXE shell.
+shell
