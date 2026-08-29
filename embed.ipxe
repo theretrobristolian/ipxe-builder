@@ -2,18 +2,32 @@
 
 # Tiny embedded bootstrap for legacy BIOS iPXE.
 #
-# The DHCP server may hand this client non-efi/ipxe.pxe again, so do not fall
-# through to normal iPXE autoboot.  Instead obtain networking and explicitly
-# chain to the editable autoexec.ipxe on the TFTP server.
+# Mirror the iPXE 2.0.0 autoexec discovery behaviour used by the official UEFI
+# binaries: first look alongside the boot binary, then fall back to the TFTP
+# root.  The TFTP server address comes entirely from DHCP via next-server.
+#
+# This builder deliberately publishes the legacy BIOS binary as:
+#   non-efi/ipxe.pxe
+# so its adjacent autoexec location is:
+#   non-efi/autoexec.ipxe
 
 dhcp || goto failed
 
-isset ${next-server} || set next-server 10.1.2.3
+isset ${next-server} || goto no_server
 
+chain tftp://${next-server}/non-efi/autoexec.ipxe ||
 chain tftp://${next-server}/autoexec.ipxe || goto failed
+
+:no_server
+echo
+echo DHCP did not provide a TFTP next-server.
+echo Dropping to iPXE shell.
+shell
 
 :failed
 echo
-echo Unable to load tftp://${next-server}/autoexec.ipxe
+echo Unable to load autoexec.ipxe from either:
+echo   tftp://${next-server}/non-efi/autoexec.ipxe
+echo   tftp://${next-server}/autoexec.ipxe
 echo Dropping to iPXE shell.
 shell
