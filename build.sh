@@ -21,6 +21,7 @@ UPSTREAM_ARCHIVE="${CACHE_DIR}/ipxeboot-${IPXE_VERSION}.tar.gz"
 SOURCE_TREE="${SOURCE_DIR}/ipxe-${IPXE_VERSION}"
 LOCAL_GENERAL_CONFIG="${SCRIPT_ROOT}/config/local/general.h"
 LOCAL_CONSOLE_CONFIG="${SCRIPT_ROOT}/config/local/console.h"
+EMBED_SCRIPT="${SCRIPT_ROOT}/embed.ipxe"
 AUTOEXEC="${SCRIPT_ROOT}/autoexec.ipxe"
 
 log()  { printf '[+] %s\n' "$*"; }
@@ -113,23 +114,32 @@ fi
 
 [[ -f "${LOCAL_GENERAL_CONFIG}" ]] || die "Missing ${LOCAL_GENERAL_CONFIG}"
 [[ -f "${LOCAL_CONSOLE_CONFIG}" ]] || die "Missing ${LOCAL_CONSOLE_CONFIG}"
+[[ -f "${EMBED_SCRIPT}" ]] || die "Missing ${EMBED_SCRIPT}"
 
 log "Applying local BIOS configuration..."
 mkdir -p "${SOURCE_TREE}/src/config/local"
 cp "${LOCAL_GENERAL_CONFIG}" "${SOURCE_TREE}/src/config/local/general.h"
 cp "${LOCAL_CONSOLE_CONFIG}" "${SOURCE_TREE}/src/config/local/console.h"
 
-# This environment chainloads iPXE from an existing PXE/UNDI stack.  Build the
-# UNDI-specific image rather than the much larger all-driver bin/ipxe.pxe.
-log "Building legacy BIOS UNDI chainloader..."
-make -C "${SOURCE_TREE}/src" -j"$(getconf _NPROCESSORS_ONLN 2>/dev/null || echo 1)" bin/undionly.kpxe
+# Legacy BIOS starts from the machine's existing PXE/UNDI stack.  Embed only a
+# tiny bootstrap that explicitly loads /autoexec.ipxe from the TFTP server.
+# This prevents DHCP from handing iPXE its own filename again and causing a
+# chainload loop, while keeping the real autoexec.ipxe editable on the server.
+log "Building legacy BIOS UNDI chainloader with embedded TFTP bootstrap..."
+make -C "${SOURCE_TREE}/src" \
+    -j"$(getconf _NPROCESSORS_ONLN 2>/dev/null || echo 1)" \
+    bin/undionly.kpxe \
+    EMBED="${EMBED_SCRIPT}"
 
 [[ -s "${SOURCE_TREE}/src/bin/undionly.kpxe" ]] || die "BIOS build did not produce bin/undionly.kpxe"
 
 mkdir -p "${TFTP_DIR}/non-efi"
 cp "${SOURCE_TREE}/src/bin/undionly.kpxe" "${TFTP_DIR}/non-efi/ipxe.pxe"
 
-if [[ -f "${AUTOEXEC}" ]]; then cp "${AUTOEXEC}" "${TFTP_DIR}/autoexec.ipxe"; fi
+# This is the external, editable second-stage script expected by embed.ipxe.
+if [[ -f "${AUTOEXEC}" ]]; then
+    cp "${AUTOEXEC}" "${TFTP_DIR}/autoexec.ipxe"
+fi
 
 cat > "${TFTP_DIR}/BUILD-INFO.txt" <<EOF
 ipxe-builder
@@ -143,11 +153,19 @@ UEFI/Secure Boot:
 
 Legacy BIOS:
   non-efi/ipxe.pxe is a locally compiled bin/undionly.kpxe, renamed to retain
-  the existing DHCP filename.  It uses the firmware PXE/UNDI network stack and
-  enables the console command, PNG images and framebuffer console.
+  the existing DHCP filename.
+
+  The binary embeds only embed.ipxe.  That bootstrap obtains DHCP and chains
+  explicitly to tftp://\${next-server}/autoexec.ipxe.  The real autoexec.ipxe
+  therefore remains an external editable TFTP file and does not require the
+  BIOS binary to be rebuilt when menu/bootstrap settings change.
+
+  Local BIOS features include console command, PNG image support and the
+  framebuffer console.
 EOF
 
 printf '\n'
 log "Build complete."
 printf '\nTFTP root:\n  %s\n\n' "${TFTP_DIR}"
-printf 'Legacy BIOS test file:\n  non-efi/ipxe.pxe\n\n'
+printf 'Legacy BIOS test file:\n  non-efi/ipxe.pxe\n'
+printf 'External editable script:\n  autoexec.ipxe\n\n'
