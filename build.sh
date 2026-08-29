@@ -27,12 +27,46 @@ warn() { printf '[!] %s\n' "$*" >&2; }
 die()  { printf '[ERROR] %s\n' "$*" >&2; exit 1; }
 
 need_cmd() {
-    command -v "$1" >/dev/null 2>&1 || die "Required command not found: $1"
+    command -v "$1" >/dev/null 2>&1 || return 1
+}
+
+install_dependencies() {
+    local missing=()
+    local cmd
+
+    for cmd in curl tar git make gcc perl getconf; do
+        need_cmd "${cmd}" || missing+=("${cmd}")
+    done
+
+    [[ ${#missing[@]} -eq 0 ]] && return 0
+
+    warn "Missing required commands: ${missing[*]}"
+
+    if command -v apt-get >/dev/null 2>&1; then
+        log "Installing required build dependencies with apt..."
+
+        local sudo_cmd=()
+        if [[ ${EUID} -ne 0 ]]; then
+            command -v sudo >/dev/null 2>&1 || \
+                die "Dependencies are missing and sudo is not available. Install: build-essential git curl perl"
+            sudo_cmd=(sudo)
+        fi
+
+        "${sudo_cmd[@]}" apt-get update
+        "${sudo_cmd[@]}" apt-get install -y build-essential git curl perl
+    else
+        die "Missing required commands: ${missing[*]}. Install your distribution's build-essential/compiler, git, curl and perl packages, then rerun build.sh."
+    fi
+
+    for cmd in curl tar git make gcc perl getconf; do
+        need_cmd "${cmd}" || die "Required command still unavailable after dependency installation: ${cmd}"
+    done
 }
 
 refresh_repo() {
     log "Refreshing repository from origin/main..."
-    need_cmd git
+
+    need_cmd git || die "--refresh requires git to be installed."
 
     git -C "${SCRIPT_ROOT}" rev-parse --is-inside-work-tree >/dev/null 2>&1 || \
         die "--refresh requires this project to be a Git working tree."
@@ -50,9 +84,7 @@ elif [[ $# -gt 0 ]]; then
     die "Unknown option: $1"
 fi
 
-for cmd in curl tar git make gcc perl; do
-    need_cmd "${cmd}"
-done
+install_dependencies
 
 mkdir -p "${CACHE_DIR}" "${SOURCE_DIR}" "${OUTPUT_DIR}"
 
