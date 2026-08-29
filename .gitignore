@@ -1,0 +1,38 @@
+tc-scratch/
+original/
+output/
+patched/
+cache/
+source/
+*.iso
+
+# macOS metadata
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+.Spotlight-V100
+.Trashes
+.fseventsd
+
+# Windows metadata
+Thumbs.db
+Thumbs.db:encryptable
+ehthumbs.db
+ehthumbs_vista.db
+[Dd]esktop.ini
+$RECYCLE.BIN/
+
+# Microsoft Office temporary and lock files
+~$*.doc
+~$*.docx
+~$*.xls
+~$*.xlsx
+~$*.ppt
+~$*.pptx
+
+# General temporary and backup files
+*.tmp
+*.temp
+*.bak
+*.swp
