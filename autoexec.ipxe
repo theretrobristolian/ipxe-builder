@@ -1,0 +1,16 @@
+#!ipxe
+
+echo
+echo ================================================================
+echo  iPXE Builder - The Retro Bristolian
+echo ================================================================
+echo
+echo No production menu has been configured yet.
+echo Edit autoexec.ipxe and chain to your iPXE menu.
+echo
+echo Network interfaces:
+ifstat
+
+echo
+prompt --key 0x02 --timeout 5000 Press Ctrl-B for the iPXE shell... && shell
+shell
